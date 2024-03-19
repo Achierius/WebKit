@@ -105,6 +105,9 @@ using WTF::StackTrace;
 
 namespace JSC {
 
+inline size_t compareBranchCount = 0;
+inline size_t compareBranchEmitted = 0;
+
 class ArgList;
 class BuiltinExecutables;
 class BytecodeIntrinsicRegistry;
@@ -958,6 +961,8 @@ public:
     VMTraps& traps() { return m_traps; }
 
     JS_EXPORT_PRIVATE bool hasExceptionsAfterHandlingTraps();
+
+    JS_EXPORT_PRIVATE void printCompareBranchStats();
 
     // These may be called concurrently from another thread.
     void notifyNeedDebuggerBreak() { m_traps.fireTrap(VMTraps::NeedDebuggerBreak); }

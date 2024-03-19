@@ -4382,6 +4382,8 @@ int jscmain(int argc, char** argv)
             vm.setOnEachMicrotaskTick(WTFMove(onEachMicrotaskTick));
 #endif
             runWithOptions(globalObject, mainCommandLine.get(), success);
+
+            vm.printCompareBranchStats();
         });
 
     printSuperSamplerState();

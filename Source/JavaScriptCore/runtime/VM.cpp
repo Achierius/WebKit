@@ -910,6 +910,11 @@ bool VM::hasExceptionsAfterHandlingTraps()
     return exception();
 }
 
+void VM::printCompareBranchStats() {
+    printf("*** Static  compare-branch count: %lu\n",  compareBranchEmitted);
+    printf("*** Dynamic compare-branch count: %lu\n",  compareBranchCount);
+}
+
 void VM::clearException()
 {
 #if ENABLE(EXCEPTION_SCOPE_VERIFICATION)

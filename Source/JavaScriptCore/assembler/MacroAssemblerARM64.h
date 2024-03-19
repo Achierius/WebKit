@@ -36,6 +36,9 @@
 
 namespace JSC {
 
+extern size_t compareBranchCount;
+extern size_t compareBranchEmitted;
+
 using Assembler = TARGET_ASSEMBLER;
 class Reg;
 
@@ -2587,26 +2590,45 @@ public:
         }
     }
 
+    void countCompareBranch() {
+        compareBranchEmitted += 1;
+
+        RegisterID addr = ARM64Registers::x8;
+        RegisterID scratch = ARM64Registers::x9;
+
+        pushPair(addr, scratch);
+
+        move(TrustedImm64(bitwise_cast<uint64_t>(&compareBranchCount)), addr);
+        move(TrustedImm64(1), scratch);
+        atomicXchgAdd64(scratch, Address(addr), scratch);
+
+        popPair(addr, scratch);
+    }
+
     Jump branchDouble(DoubleCondition cond, FPRegisterID left, FPRegisterID right)
     {
+        countCompareBranch();
         m_assembler.fcmp<64>(left, right);
         return jumpAfterFloatingPointCompare(cond);
     }
 
     Jump branchFloat(DoubleCondition cond, FPRegisterID left, FPRegisterID right)
     {
+        countCompareBranch();
         m_assembler.fcmp<32>(left, right);
         return jumpAfterFloatingPointCompare(cond);
     }
 
     Jump branchDoubleWithZero(DoubleCondition cond, FPRegisterID left)
     {
+        countCompareBranch();
         m_assembler.fcmp_0<64>(left);
         return jumpAfterFloatingPointCompare(cond);
     }
 
     Jump branchFloatWithZero(DoubleCondition cond, FPRegisterID left)
     {
+        countCompareBranch();
         m_assembler.fcmp_0<32>(left);
         return jumpAfterFloatingPointCompare(cond);
     }
@@ -2641,6 +2663,7 @@ public:
 
     Jump branchDoubleNonZero(FPRegisterID reg, FPRegisterID)
     {
+        countCompareBranch();
         m_assembler.fcmp_0<64>(reg);
         Jump unordered = makeBranch(Assembler::ConditionVS);
         Jump result = makeBranch(Assembler::ConditionNE);
@@ -2650,6 +2673,7 @@ public:
 
     Jump branchDoubleZeroOrNaN(FPRegisterID reg, FPRegisterID)
     {
+        countCompareBranch();
         m_assembler.fcmp_0<64>(reg);
         Jump unordered = makeBranch(Assembler::ConditionVS);
         Jump notEqual = makeBranch(Assembler::ConditionNE);
@@ -2662,6 +2686,7 @@ public:
 
     Jump branchTruncateDoubleToInt32(FPRegisterID src, RegisterID dest, BranchTruncateType branchType = BranchIfTruncateFailed)
     {
+        countCompareBranch();
         // Truncate to a 64-bit integer in dataTempRegister, copy the low 32-bit to dest.
         m_assembler.fcvtzs<64, 64>(getCachedDataTempRegisterIDAndInvalidate(), src);
         zeroExtend32ToWord(dataTempRegister, dest);
@@ -6065,13 +6090,26 @@ protected:
         m_assembler.nop();
         return Jump(label, m_makeJumpPatchable ? Assembler::JumpConditionFixedSize : Assembler::JumpCondition, cond);
     }
-    ALWAYS_INLINE Jump makeBranch(RelationalCondition cond) { return makeBranch(ARM64Condition(cond)); }
-    ALWAYS_INLINE Jump makeBranch(ResultCondition cond) { return makeBranch(ARM64Condition(cond)); }
-    ALWAYS_INLINE Jump makeBranch(DoubleCondition cond) { return makeBranch(ARM64Condition(cond)); }
+    ALWAYS_INLINE Jump makeBranch(RelationalCondition cond)
+    {
+        countCompareBranch();
+        return makeBranch(ARM64Condition(cond));
+    }
+    ALWAYS_INLINE Jump makeBranch(ResultCondition cond)
+    {
+        countCompareBranch();
+        return makeBranch(ARM64Condition(cond));
+    }
+    ALWAYS_INLINE Jump makeBranch(DoubleCondition cond)
+    {
+        countCompareBranch();
+        return makeBranch(ARM64Condition(cond));
+    }
 
     template <int dataSize>
     ALWAYS_INLINE Jump makeCompareAndBranch(ZeroCondition cond, RegisterID reg)
     {
+        countCompareBranch();
         if (m_makeJumpPatchable)
             padBeforePatch();
         if (cond == IsZero)
@@ -6085,6 +6123,7 @@ protected:
 
     ALWAYS_INLINE Jump makeTestBitAndBranch(RegisterID reg, unsigned bit, ZeroCondition cond)
     {
+        countCompareBranch();
         if (m_makeJumpPatchable)
             padBeforePatch();
         ASSERT(bit < 64);
