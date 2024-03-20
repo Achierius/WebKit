@@ -142,6 +142,9 @@
 #include <wtf/Threading.h>
 #include <wtf/text/AtomStringTable.h>
 
+#include <fstream>
+#include <iostream>
+
 #if ENABLE(C_LOOP)
 #include "CLoopStackInlines.h"
 #endif
@@ -457,6 +460,8 @@ VM::~VM()
 
     Gigacage::removePrimitiveDisableCallback(primitiveGigacageDisabledCallback, this);
     deferredWorkTimer->stopRunningTasks();
+
+    dumpCompareBranchStatsToFile();
 #if ENABLE(WEBASSEMBLY)
     if (Wasm::Worklist* worklist = Wasm::existingWorklistOrNull())
         worklist->stopAllPlansForContext(*this);
@@ -913,6 +918,17 @@ bool VM::hasExceptionsAfterHandlingTraps()
 void VM::printCompareBranchStats() {
     printf("*** Static  compare-branch count: %lu\n",  compareBranchEmitted);
     printf("*** Dynamic compare-branch count: %lu\n",  compareBranchCount);
+}
+
+void VM::dumpCompareBranchStatsToFile() {
+    std::stringstream filename {};
+    if (char* env_prefix = getenv("MEP_FILE_PREFIX"))
+        filename << "filedumps/stats_" << env_prefix << "_" << getpid();
+    else
+        filename << "filedumps/stats_" << getpid();
+    std::ofstream outfile (filename.str().c_str());
+
+    outfile << compareBranchEmitted << "\n" << compareBranchCount << std::endl;
 }
 
 void VM::clearException()

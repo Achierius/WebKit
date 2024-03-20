@@ -962,6 +962,7 @@ public:
 
     JS_EXPORT_PRIVATE bool hasExceptionsAfterHandlingTraps();
 
+    JS_EXPORT_PRIVATE void dumpCompareBranchStatsToFile();
     JS_EXPORT_PRIVATE void printCompareBranchStats();
 
     // These may be called concurrently from another thread.

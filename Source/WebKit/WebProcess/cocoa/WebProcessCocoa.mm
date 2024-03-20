@@ -947,11 +947,11 @@ RetainPtr<CFDataRef> WebProcess::sourceApplicationAuditData() const
 void WebProcess::initializeSandbox(const AuxiliaryProcessInitializationParameters& parameters, SandboxInitializationParameters& sandboxParameters)
 {
 #if PLATFORM(MAC) || PLATFORM(MACCATALYST)
-    auto webKitBundle = [NSBundle bundleForClass:NSClassFromString(@"WKWebView")];
+    //auto webKitBundle = [NSBundle bundleForClass:NSClassFromString(@"WKWebView")];
 
-    sandboxParameters.setOverrideSandboxProfilePath(makeString(String([webKitBundle resourcePath]), "/com.apple.WebProcess.sb"));
+    //sandboxParameters.setOverrideSandboxProfilePath(makeString(String([webKitBundle resourcePath]), "/com.apple.WebProcess.sb"));
 
-    AuxiliaryProcess::initializeSandbox(parameters, sandboxParameters);
+    //AuxiliaryProcess::initializeSandbox(parameters, sandboxParameters);
 #endif
 }
 

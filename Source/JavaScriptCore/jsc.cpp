@@ -4384,6 +4384,7 @@ int jscmain(int argc, char** argv)
             runWithOptions(globalObject, mainCommandLine.get(), success);
 
             vm.printCompareBranchStats();
+            vm.dumpCompareBranchStatsToFile();
         });
 
     printSuperSamplerState();
