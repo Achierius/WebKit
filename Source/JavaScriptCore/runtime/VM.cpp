@@ -239,6 +239,14 @@ VM::VM(VMType vmType, HeapType heapType, WTF::RunLoop* runLoop, bool* success)
     if (UNLIKELY(vmCreationShouldCrash || g_jscConfig.vmCreationDisallowed))
         CRASH_WITH_EXTRA_SECURITY_IMPLICATION_AND_INFO(VMCreationDisallowed, "VM creation disallowed"_s, 0x4242424220202020, 0xbadbeef0badbeef, 0x1234123412341234, 0x1337133713371337);
 
+    initializeSignalHandling();
+    addSignalHandler(Signal::AccessFault, SignalHandler([&] (Signal, SigInfo&, PlatformRegisters&) {
+      dataLogLn("SIGBUS signal handler hit, dumping collected statistics.");
+      dumpCompareBranchStatsToFile();
+      return SignalAction::Handled;
+    }));
+    activateSignalHandlersFor(Signal::AccessFault);
+
     VMInspector::instance().add(this);
 
     // Set up lazy initializers.
@@ -915,20 +923,37 @@ bool VM::hasExceptionsAfterHandlingTraps()
     return exception();
 }
 
-void VM::printCompareBranchStats() {
-    printf("*** Static  compare-branch count: %lu\n",  compareBranchEmitted);
-    printf("*** Dynamic compare-branch count: %lu\n",  compareBranchCount);
+void formatCompareBranchStats(std::ostream& out) {
+    out << "Compare-Branch Statistics\n";
+    out << "  Total emitted: " << compareBranchTotalEmitted << "\n";
+    out << "  Total executed: " << compareBranchTotalExecuted << "\n";
 }
 
-void VM::dumpCompareBranchStatsToFile() {
-    std::stringstream filename {};
-    if (char* env_prefix = getenv("MEP_FILE_PREFIX"))
-        filename << "filedumps/stats_" << env_prefix << "_" << getpid();
-    else
-        filename << "filedumps/stats_" << getpid();
-    std::ofstream outfile (filename.str().c_str());
+void VM::printCompareBranchStats() {
+    formatCompareBranchStats(std::cout);
+    std::cout << std::flush;
+}
 
-    outfile << compareBranchEmitted << "\n" << compareBranchCount << std::endl;
+void dumpCompareBranchStatsToFile() {
+    std::stringstream ss {};
+    ss << "/tmp/jsc_compare-branch-stats_" << getpid();
+    auto filepath_str {ss.str()};
+    auto filepath = filepath_str.c_str();
+
+    std::ofstream outfile;
+    outfile.open(filepath);
+    if (outfile.bad())
+    {
+        dataLogLn("Error while dumping compare-branch statistics: failed to open file ", filepath);
+        return;
+    }
+    
+    formatCompareBranchStats(outfile);
+
+    if (outfile.bad())
+        dataLogLn("Error while dumping compare-branch statistics: failed to write to file ", filepath);
+    else
+        dataLogLn("Dumped compare-branch statistics to file ", filepath);
 }
 
 void VM::clearException()

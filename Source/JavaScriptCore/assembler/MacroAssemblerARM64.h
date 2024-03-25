@@ -36,8 +36,8 @@
 
 namespace JSC {
 
-extern size_t compareBranchCount;
-extern size_t compareBranchEmitted;
+extern size_t compareBranchTotalExecuted;
+extern size_t compareBranchTotalEmitted;
 
 using Assembler = TARGET_ASSEMBLER;
 class Reg;
@@ -2591,14 +2591,14 @@ public:
     }
 
     void countCompareBranch() {
-        compareBranchEmitted += 1;
+        compareBranchTotalEmitted += 1;
 
         RegisterID addr = ARM64Registers::x8;
         RegisterID scratch = ARM64Registers::x9;
 
         pushPair(addr, scratch);
 
-        move(TrustedImm64(bitwise_cast<uint64_t>(&compareBranchCount)), addr);
+        move(TrustedImm64(bitwise_cast<uint64_t>(&compareBranchTotalExecuted)), addr);
         move(TrustedImm64(1), scratch);
         atomicXchgAdd64(scratch, Address(addr), scratch);
 

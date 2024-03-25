@@ -61,6 +61,7 @@
 #include "WeakGCMap.h"
 #include "WriteBarrier.h"
 #include <variant>
+#include <iosfwd>
 #include <wtf/BumpPointerAllocator.h>
 #include <wtf/CheckedArithmetic.h>
 #include <wtf/Deque.h>
@@ -105,8 +106,10 @@ using WTF::StackTrace;
 
 namespace JSC {
 
-inline size_t compareBranchCount = 0;
-inline size_t compareBranchEmitted = 0;
+inline size_t compareBranchTotalExecuted = 0;
+inline size_t compareBranchTotalEmitted = 0;
+[[maybe_unused]] JS_EXPORT_PRIVATE void formatCompareBranchStats(std::ostream& out);
+[[maybe_unused]] JS_EXPORT_PRIVATE void dumpCompareBranchStatsToFile();
 
 class ArgList;
 class BuiltinExecutables;
@@ -962,7 +965,6 @@ public:
 
     JS_EXPORT_PRIVATE bool hasExceptionsAfterHandlingTraps();
 
-    JS_EXPORT_PRIVATE void dumpCompareBranchStatsToFile();
     JS_EXPORT_PRIVATE void printCompareBranchStats();
 
     // These may be called concurrently from another thread.
