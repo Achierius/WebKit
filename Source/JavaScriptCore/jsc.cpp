@@ -4383,7 +4383,7 @@ int jscmain(int argc, char** argv)
 #endif
             runWithOptions(globalObject, mainCommandLine.get(), success);
 
-            vm.printCompareBranchStats();
+            printCompareBranchStats();
         });
 
     printSuperSamplerState();

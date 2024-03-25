@@ -28,6 +28,7 @@
 #include "JSExportMacros.h"
 #include <wtf/NumberOfCores.h>
 #include <wtf/StdIntExtras.h>
+#include <iosfwd>
 
 namespace JSC {
 
@@ -209,6 +210,11 @@ constexpr size_t prologueStackPointerDelta()
 #endif
 }
 
+inline size_t compareBranchTotalExecuted = 0;
+inline size_t compareBranchTotalEmitted = 0;
+JS_EXPORT_PRIVATE void formatCompareBranchStats(std::ostream& out);
+JS_EXPORT_PRIVATE void dumpCompareBranchStatsToFile();
+JS_EXPORT_PRIVATE void printCompareBranchStats();
 
 
 } // namespace JSC

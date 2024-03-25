@@ -36,9 +36,6 @@
 
 namespace JSC {
 
-extern size_t compareBranchTotalExecuted;
-extern size_t compareBranchTotalEmitted;
-
 using Assembler = TARGET_ASSEMBLER;
 class Reg;
 

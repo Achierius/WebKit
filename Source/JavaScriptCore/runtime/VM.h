@@ -106,11 +106,6 @@ using WTF::StackTrace;
 
 namespace JSC {
 
-inline size_t compareBranchTotalExecuted = 0;
-inline size_t compareBranchTotalEmitted = 0;
-[[maybe_unused]] JS_EXPORT_PRIVATE void formatCompareBranchStats(std::ostream& out);
-[[maybe_unused]] JS_EXPORT_PRIVATE void dumpCompareBranchStatsToFile();
-
 class ArgList;
 class BuiltinExecutables;
 class BytecodeIntrinsicRegistry;
@@ -964,8 +959,6 @@ public:
     VMTraps& traps() { return m_traps; }
 
     JS_EXPORT_PRIVATE bool hasExceptionsAfterHandlingTraps();
-
-    JS_EXPORT_PRIVATE void printCompareBranchStats();
 
     // These may be called concurrently from another thread.
     void notifyNeedDebuggerBreak() { m_traps.fireTrap(VMTraps::NeedDebuggerBreak); }

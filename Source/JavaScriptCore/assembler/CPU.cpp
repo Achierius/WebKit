@@ -26,6 +26,9 @@
 #include "config.h"
 #include "CPU.h"
 
+#include <iostream>
+#include <fstream>
+
 #if (CPU(X86) || CPU(X86_64) || CPU(ARM64)) && OS(DARWIN)
 #include <mutex>
 #include <sys/sysctl.h>
@@ -145,5 +148,39 @@ bool isX86_64_AVX()
 #endif
 }
 #endif
+
+void formatCompareBranchStats(std::ostream& out) {
+    out << "Compare-Branch Statistics\n";
+    out << "  Total emitted: " << compareBranchTotalEmitted << "\n";
+    out << "  Total executed: " << compareBranchTotalExecuted << "\n";
+}
+
+void dumpCompareBranchStatsToFile() {
+    std::stringstream ss {};
+    ss << "/tmp/jsc_compare-branch-stats_" << getpid();
+    auto filepath_str {ss.str()};
+    auto filepath = filepath_str.c_str();
+
+    std::ofstream outfile;
+    outfile.open(filepath);
+    if (outfile.bad())
+    {
+        dataLogLn("Error while dumping compare-branch statistics: failed to open file ", filepath);
+        return;
+    }
+    
+    formatCompareBranchStats(outfile);
+
+    if (outfile.bad())
+        dataLogLn("Error while dumping compare-branch statistics: failed to write to file ", filepath);
+    else
+        dataLogLn("Dumped compare-branch statistics to file ", filepath);
+}
+
+void printCompareBranchStats() {
+    formatCompareBranchStats(std::cout);
+    std::cout << std::flush;
+}
+
 
 } // namespace JSC

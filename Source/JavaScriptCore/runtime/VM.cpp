@@ -142,9 +142,6 @@
 #include <wtf/Threading.h>
 #include <wtf/text/AtomStringTable.h>
 
-#include <fstream>
-#include <iostream>
-
 #if ENABLE(C_LOOP)
 #include "CLoopStackInlines.h"
 #endif
@@ -921,39 +918,6 @@ bool VM::hasExceptionsAfterHandlingTraps()
     if (UNLIKELY(traps().needHandling(VMTraps::NonDebuggerAsyncEvents)))
         m_traps.handleTraps(VMTraps::NonDebuggerAsyncEvents);
     return exception();
-}
-
-void formatCompareBranchStats(std::ostream& out) {
-    out << "Compare-Branch Statistics\n";
-    out << "  Total emitted: " << compareBranchTotalEmitted << "\n";
-    out << "  Total executed: " << compareBranchTotalExecuted << "\n";
-}
-
-void VM::printCompareBranchStats() {
-    formatCompareBranchStats(std::cout);
-    std::cout << std::flush;
-}
-
-void dumpCompareBranchStatsToFile() {
-    std::stringstream ss {};
-    ss << "/tmp/jsc_compare-branch-stats_" << getpid();
-    auto filepath_str {ss.str()};
-    auto filepath = filepath_str.c_str();
-
-    std::ofstream outfile;
-    outfile.open(filepath);
-    if (outfile.bad())
-    {
-        dataLogLn("Error while dumping compare-branch statistics: failed to open file ", filepath);
-        return;
-    }
-    
-    formatCompareBranchStats(outfile);
-
-    if (outfile.bad())
-        dataLogLn("Error while dumping compare-branch statistics: failed to write to file ", filepath);
-    else
-        dataLogLn("Dumped compare-branch statistics to file ", filepath);
 }
 
 void VM::clearException()
