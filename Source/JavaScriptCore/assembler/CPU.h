@@ -29,6 +29,7 @@
 #include <wtf/NumberOfCores.h>
 #include <wtf/StdIntExtras.h>
 #include <iosfwd>
+#include <mutex>
 
 namespace JSC {
 
@@ -210,8 +211,19 @@ constexpr size_t prologueStackPointerDelta()
 #endif
 }
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wglobal-constructors"
+#pragma clang diagnostic ignored "-Wexit-time-destructors"
+// Causes us to abort if we accidentally double-count
+inline std::mutex justBranchCountGuard {};
+inline size_t justBranchTotalExecuted = 0;
+inline size_t justBranchTotalEmitted = 0;
+inline std::mutex compareBranchCountGuard {};
 inline size_t compareBranchTotalExecuted = 0;
 inline size_t compareBranchTotalEmitted = 0;
+inline size_t compareMoveTotalExecuted = 0;
+inline size_t compareMoveTotalEmitted = 0;
+#pragma clang diagnostic pop
 JS_EXPORT_PRIVATE void formatCompareBranchStats(std::ostream& out);
 JS_EXPORT_PRIVATE void dumpCompareBranchStatsToFile();
 JS_EXPORT_PRIVATE void printCompareBranchStats();

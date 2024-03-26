@@ -27,6 +27,9 @@
 
 #if ENABLE(ASSEMBLER) && CPU(ARM64)
 
+#include <cstdio>
+#include <mutex>
+
 #include "ARM64Assembler.h"
 #include "AbstractMacroAssembler.h"
 #include "JITOperationValidation.h"
@@ -2602,30 +2605,76 @@ public:
         popPair(addr, scratch);
     }
 
+#define CONCATENATE_DETAIL(x, y) x##y
+#define CONCATENATE(x, y) CONCATENATE_DETAIL(x, y)
+#define UNIQUE_NAME(prefix) CONCATENATE(prefix, __COUNTER__)
+
+#define COUNT_COMPARE_BRANCH() \
+    /*printf("*** counting compare-branch inside %s %d\n", __PRETTY_FUNCTION__, __LINE__);*/ \
+    std::scoped_lock UNIQUE_NAME(lock)(compareBranchCountGuard); \
+    countCompareBranch();
+    
+
+    void countJustBranch() {
+        justBranchTotalEmitted += 1;
+
+        RegisterID addr = ARM64Registers::x8;
+        RegisterID scratch = ARM64Registers::x9;
+
+        pushPair(addr, scratch);
+
+        move(TrustedImm64(bitwise_cast<uint64_t>(&justBranchTotalExecuted)), addr);
+        move(TrustedImm64(1), scratch);
+        atomicXchgAdd64(scratch, Address(addr), scratch);
+
+        popPair(addr, scratch);
+    }
+
+#define COUNT_JUST_BRANCH() \
+    /*printf("*** counting    just-branch inside %s\n", __PRETTY_FUNCTION__);*/ \
+    std::scoped_lock UNIQUE_NAME(lock)(justBranchCountGuard); \
+    countJustBranch();
+
+    void countCompareMove() {
+        compareMoveTotalEmitted += 1;
+
+        RegisterID addr = ARM64Registers::x8;
+        RegisterID scratch = ARM64Registers::x9;
+
+        pushPair(addr, scratch);
+
+        move(TrustedImm64(bitwise_cast<uint64_t>(&compareMoveTotalEmitted)), addr);
+        move(TrustedImm64(1), scratch);
+        atomicXchgAdd64(scratch, Address(addr), scratch);
+
+        popPair(addr, scratch);
+    }
+
+
     Jump branchDouble(DoubleCondition cond, FPRegisterID left, FPRegisterID right)
     {
-        countCompareBranch();
+        COUNT_COMPARE_BRANCH();
         m_assembler.fcmp<64>(left, right);
         return jumpAfterFloatingPointCompare(cond);
     }
 
     Jump branchFloat(DoubleCondition cond, FPRegisterID left, FPRegisterID right)
     {
-        countCompareBranch();
+        COUNT_COMPARE_BRANCH();
         m_assembler.fcmp<32>(left, right);
         return jumpAfterFloatingPointCompare(cond);
     }
 
     Jump branchDoubleWithZero(DoubleCondition cond, FPRegisterID left)
     {
-        countCompareBranch();
+        COUNT_COMPARE_BRANCH();
         m_assembler.fcmp_0<64>(left);
         return jumpAfterFloatingPointCompare(cond);
     }
 
     Jump branchFloatWithZero(DoubleCondition cond, FPRegisterID left)
     {
-        countCompareBranch();
+        COUNT_COMPARE_BRANCH();
         m_assembler.fcmp_0<32>(left);
         return jumpAfterFloatingPointCompare(cond);
     }
@@ -2660,7 +2709,7 @@ public:
 
     Jump branchDoubleNonZero(FPRegisterID reg, FPRegisterID)
     {
-        countCompareBranch();
+        COUNT_COMPARE_BRANCH();
         m_assembler.fcmp_0<64>(reg);
         Jump unordered = makeBranch(Assembler::ConditionVS);
         Jump result = makeBranch(Assembler::ConditionNE);
@@ -2670,7 +2719,7 @@ public:
 
     Jump branchDoubleZeroOrNaN(FPRegisterID reg, FPRegisterID)
     {
-        countCompareBranch();
+        COUNT_COMPARE_BRANCH();
         m_assembler.fcmp_0<64>(reg);
         Jump unordered = makeBranch(Assembler::ConditionVS);
         Jump notEqual = makeBranch(Assembler::ConditionNE);
@@ -2683,7 +2732,7 @@ public:
 
     Jump branchTruncateDoubleToInt32(FPRegisterID src, RegisterID dest, BranchTruncateType branchType = BranchIfTruncateFailed)
     {
-        countCompareBranch();
+        COUNT_COMPARE_BRANCH();
         // Truncate to a 64-bit integer in dataTempRegister, copy the low 32-bit to dest.
         m_assembler.fcvtzs<64, 64>(getCachedDataTempRegisterIDAndInvalidate(), src);
         zeroExtend32ToWord(dataTempRegister, dest);
@@ -2920,48 +2969,56 @@ public:
 
     void moveConditionallyDouble(DoubleCondition cond, FPRegisterID left, FPRegisterID right, RegisterID src, RegisterID dest)
     {
+        countCompareMove();
         m_assembler.fcmp<64>(left, right);
         moveConditionallyAfterFloatingPointCompare<64>(cond, src, dest);
     }
 
     void moveConditionallyDouble(DoubleCondition cond, FPRegisterID left, FPRegisterID right, RegisterID thenCase, RegisterID elseCase, RegisterID dest)
     {
+        countCompareMove();
         m_assembler.fcmp<64>(left, right);
         moveConditionallyAfterFloatingPointCompare<64>(cond, thenCase, elseCase, dest);
     }
 
     void moveConditionallyDoubleWithZero(DoubleCondition cond, FPRegisterID left, RegisterID src, RegisterID dest)
     {
+        countCompareMove();
         m_assembler.fcmp_0<64>(left);
         moveConditionallyAfterFloatingPointCompare<64>(cond, src, dest);
     }
 
     void moveConditionallyDoubleWithZero(DoubleCondition cond, FPRegisterID left, RegisterID thenCase, RegisterID elseCase, RegisterID dest)
     {
+        countCompareMove();
         m_assembler.fcmp_0<64>(left);
         moveConditionallyAfterFloatingPointCompare<64>(cond, thenCase, elseCase, dest);
     }
 
     void moveConditionallyFloat(DoubleCondition cond, FPRegisterID left, FPRegisterID right, RegisterID src, RegisterID dest)
     {
+        countCompareMove();
         m_assembler.fcmp<32>(left, right);
         moveConditionallyAfterFloatingPointCompare<64>(cond, src, dest);
     }
 
     void moveConditionallyFloat(DoubleCondition cond, FPRegisterID left, FPRegisterID right, RegisterID thenCase, RegisterID elseCase, RegisterID dest)
     {
+        countCompareMove();
         m_assembler.fcmp<32>(left, right);
         moveConditionallyAfterFloatingPointCompare<64>(cond, thenCase, elseCase, dest);
     }
 
     void moveConditionallyFloatWithZero(DoubleCondition cond, FPRegisterID left, RegisterID src, RegisterID dest)
     {
+        countCompareMove();
         m_assembler.fcmp_0<32>(left);
         moveConditionallyAfterFloatingPointCompare<64>(cond, src, dest);
     }
 
     void moveConditionallyFloatWithZero(DoubleCondition cond, FPRegisterID left, RegisterID thenCase, RegisterID elseCase, RegisterID dest)
     {
+        countCompareMove();
         m_assembler.fcmp_0<32>(left);
         moveConditionallyAfterFloatingPointCompare<64>(cond, thenCase, elseCase, dest);
     }
@@ -3065,24 +3122,28 @@ public:
 
     void moveDoubleConditionallyDouble(DoubleCondition cond, FPRegisterID left, FPRegisterID right, FPRegisterID thenCase, FPRegisterID elseCase, FPRegisterID dest)
     {
+        countCompareMove();
         m_assembler.fcmp<64>(left, right);
         moveDoubleConditionallyAfterFloatingPointCompare<64>(cond, thenCase, elseCase, dest);
     }
 
     void moveDoubleConditionallyDoubleWithZero(DoubleCondition cond, FPRegisterID left, FPRegisterID thenCase, FPRegisterID elseCase, FPRegisterID dest)
     {
+        countCompareMove();
         m_assembler.fcmp_0<64>(left);
         moveDoubleConditionallyAfterFloatingPointCompare<64>(cond, thenCase, elseCase, dest);
     }
 
     void moveDoubleConditionallyFloat(DoubleCondition cond, FPRegisterID left, FPRegisterID right, FPRegisterID thenCase, FPRegisterID elseCase, FPRegisterID dest)
     {
+        countCompareMove();
         m_assembler.fcmp<32>(left, right);
         moveDoubleConditionallyAfterFloatingPointCompare<64>(cond, thenCase, elseCase, dest);
     }
 
     void moveDoubleConditionallyFloatWithZero(DoubleCondition cond, FPRegisterID left, FPRegisterID thenCase, FPRegisterID elseCase, FPRegisterID dest)
     {
+        countCompareMove();
         m_assembler.fcmp_0<32>(left);
         moveDoubleConditionallyAfterFloatingPointCompare<64>(cond, thenCase, elseCase, dest);
     }
@@ -3493,12 +3554,14 @@ public:
 
     void moveConditionally32(RelationalCondition cond, RegisterID left, RegisterID right, RegisterID src, RegisterID dest)
     {
+        countCompareMove();
         m_assembler.cmp<32>(left, right);
         m_assembler.csel<64>(dest, src, dest, ARM64Condition(cond));
     }
 
     void moveConditionally32(RelationalCondition cond, RegisterID left, RegisterID right, RegisterID thenCase, RegisterID elseCase, RegisterID dest)
     {
+        countCompareMove();
         m_assembler.cmp<32>(left, right);
         m_assembler.csel<64>(dest, thenCase, elseCase, ARM64Condition(cond));
     }
@@ -3513,6 +3576,7 @@ public:
             }
         }
 
+        countCompareMove();
         if (auto tuple = tryExtractShiftedImm(immediate)) {
             auto [u12, shift, inverted] = tuple.value();
             if (!inverted)
@@ -3528,12 +3592,14 @@ public:
 
     void moveConditionally64(RelationalCondition cond, RegisterID left, RegisterID right, RegisterID src, RegisterID dest)
     {
+        countCompareMove();
         m_assembler.cmp<64>(left, right);
         m_assembler.csel<64>(dest, src, dest, ARM64Condition(cond));
     }
 
     void moveConditionally64(RelationalCondition cond, RegisterID left, RegisterID right, RegisterID thenCase, RegisterID elseCase, RegisterID dest)
     {
+        countCompareMove();
         m_assembler.cmp<64>(left, right);
         m_assembler.csel<64>(dest, thenCase, elseCase, ARM64Condition(cond));
     }
@@ -3548,6 +3614,7 @@ public:
             }
         }
 
+        countCompareMove();
         if (auto tuple = tryExtractShiftedImm(immediate)) {
             auto [u12, shift, inverted] = tuple.value();
             if (!inverted)
@@ -3571,6 +3638,7 @@ public:
             }
         }
 
+        countCompareMove();
         if (auto tuple = tryExtractShiftedImm(immediate)) {
             auto [u12, shift, inverted] = tuple.value();
             if (!inverted)
@@ -3586,42 +3654,49 @@ public:
 
     void moveConditionallyTest32(ResultCondition cond, RegisterID testReg, RegisterID mask, RegisterID src, RegisterID dest)
     {
+        countCompareMove();
         m_assembler.tst<32>(testReg, mask);
         m_assembler.csel<64>(dest, src, dest, ARM64Condition(cond));
     }
 
     void moveConditionallyTest32(ResultCondition cond, RegisterID testReg, TrustedImm32 mask, RegisterID src, RegisterID dest)
     {
+        countCompareMove();
         test32(testReg, mask);
         m_assembler.csel<64>(dest, src, dest, ARM64Condition(cond));
     }
 
     void moveConditionallyTest32(ResultCondition cond, RegisterID left, RegisterID right, RegisterID thenCase, RegisterID elseCase, RegisterID dest)
     {
+        countCompareMove();
         m_assembler.tst<32>(left, right);
         m_assembler.csel<64>(dest, thenCase, elseCase, ARM64Condition(cond));
     }
 
     void moveConditionallyTest32(ResultCondition cond, RegisterID left, TrustedImm32 right, RegisterID thenCase, RegisterID elseCase, RegisterID dest)
     {
+        countCompareMove();
         test32(left, right);
         m_assembler.csel<64>(dest, thenCase, elseCase, ARM64Condition(cond));
     }
 
     void moveConditionallyTest64(ResultCondition cond, RegisterID testReg, RegisterID mask, RegisterID src, RegisterID dest)
     {
+        countCompareMove();
         m_assembler.tst<64>(testReg, mask);
         m_assembler.csel<64>(dest, src, dest, ARM64Condition(cond));
     }
 
     void moveConditionallyTest64(ResultCondition cond, RegisterID left, RegisterID right, RegisterID thenCase, RegisterID elseCase, RegisterID dest)
     {
+        countCompareMove();
         m_assembler.tst<64>(left, right);
         m_assembler.csel<64>(dest, thenCase, elseCase, ARM64Condition(cond));
     }
 
     void moveDoubleConditionally32(RelationalCondition cond, RegisterID left, RegisterID right, FPRegisterID thenCase, FPRegisterID elseCase, FPRegisterID dest)
     {
+        countCompareMove();
         m_assembler.cmp<32>(left, right);
         m_assembler.fcsel<64>(dest, thenCase, elseCase, ARM64Condition(cond));
     }
@@ -3636,6 +3711,7 @@ public:
             }
         }
 
+        countCompareMove();
         if (auto tuple = tryExtractShiftedImm(immediate)) {
             auto [u12, shift, inverted] = tuple.value();
             if (!inverted)
@@ -3651,6 +3727,7 @@ public:
 
     void moveDoubleConditionally64(RelationalCondition cond, RegisterID left, RegisterID right, FPRegisterID thenCase, FPRegisterID elseCase, FPRegisterID dest)
     {
+        countCompareMove();
         m_assembler.cmp<64>(left, right);
         m_assembler.fcsel<64>(dest, thenCase, elseCase, ARM64Condition(cond));
     }
@@ -3665,6 +3742,7 @@ public:
             }
         }
 
+        countCompareMove();
         if (auto tuple = tryExtractShiftedImm(immediate)) {
             auto [u12, shift, inverted] = tuple.value();
             if (!inverted)
@@ -3680,18 +3758,21 @@ public:
 
     void moveDoubleConditionallyTest32(ResultCondition cond, RegisterID left, RegisterID right, FPRegisterID thenCase, FPRegisterID elseCase, FPRegisterID dest)
     {
+        countCompareMove();
         m_assembler.tst<32>(left, right);
         m_assembler.fcsel<64>(dest, thenCase, elseCase, ARM64Condition(cond));
     }
 
     void moveDoubleConditionallyTest32(ResultCondition cond, RegisterID left, TrustedImm32 right, FPRegisterID thenCase, FPRegisterID elseCase, FPRegisterID dest)
     {
+        countCompareMove();
         test32(left, right);
         m_assembler.fcsel<64>(dest, thenCase, elseCase, ARM64Condition(cond));
     }
 
     void moveDoubleConditionallyTest64(ResultCondition cond, RegisterID left, RegisterID right, FPRegisterID thenCase, FPRegisterID elseCase, FPRegisterID dest)
     {
+        countCompareMove();
         m_assembler.tst<64>(left, right);
         m_assembler.fcsel<64>(dest, thenCase, elseCase, ARM64Condition(cond));
     }
@@ -3716,6 +3797,7 @@ public:
 
     Jump branch32(RelationalCondition cond, RegisterID left, RegisterID right)
     {
+        COUNT_COMPARE_BRANCH();
         m_assembler.cmp<32>(left, right);
         return Jump(makeBranch(cond));
     }
@@ -3730,11 +3812,15 @@ public:
 
         if (auto tuple = tryExtractShiftedImm(immediate)) {
             auto [u12, shift, inverted] = tuple.value();
-            if (!inverted)
+            if (!inverted) {
+                COUNT_COMPARE_BRANCH();
                 m_assembler.cmp<32>(left, u12, shift);
-            else
+            } else {
+                COUNT_COMPARE_BRANCH();
                 m_assembler.cmn<32>(left, u12, shift);
+            }
         } else {
+            COUNT_COMPARE_BRANCH();
             moveToCachedReg(right, dataMemoryTempRegister());
             m_assembler.cmp<32>(left, dataTempRegister);
         }
@@ -3789,6 +3875,7 @@ public:
                 right = dataTempRegister;
             }
         }
+        COUNT_COMPARE_BRANCH();
         m_assembler.cmp<64>(left, right);
         return Jump(makeBranch(cond));
     }
@@ -3803,11 +3890,15 @@ public:
 
         if (auto tuple = tryExtractShiftedImm(immediate)) {
             auto [u12, shift, inverted] = tuple.value();
-            if (!inverted)
+            if (!inverted) {
+                COUNT_COMPARE_BRANCH();
                 m_assembler.cmp<64>(left, u12, shift);
-            else
+            } else {
+                COUNT_COMPARE_BRANCH();
                 m_assembler.cmn<64>(left, u12, shift);
+            }
         } else {
+            COUNT_COMPARE_BRANCH();
             moveToCachedReg(right, dataMemoryTempRegister());
             m_assembler.cmp<64>(left, dataTempRegister);
         }
@@ -3824,11 +3915,15 @@ public:
 
         if (auto tuple = tryExtractShiftedImm(immediate)) {
             auto [u12, shift, inverted] = tuple.value();
-            if (!inverted)
+            if (!inverted) {
+                COUNT_COMPARE_BRANCH();
                 m_assembler.cmp<64>(left, u12, shift);
-            else
+            } else {
+                COUNT_COMPARE_BRANCH();
                 m_assembler.cmn<64>(left, u12, shift);
+            }
         } else {
+            COUNT_COMPARE_BRANCH();
             moveToCachedReg(right, dataMemoryTempRegister());
             m_assembler.cmp<64>(left, dataTempRegister);
         }
@@ -3941,19 +4036,23 @@ public:
     Jump branchTest32(ResultCondition cond, RegisterID reg, TrustedImm32 mask = TrustedImm32(-1))
     {
         if (mask.m_value == -1) {
-            if ((cond == Zero) || (cond == NonZero))
+            if ((cond == Zero) || (cond == NonZero)) {
                 return Jump(makeCompareAndBranch<32>(static_cast<ZeroCondition>(cond), reg));
+            }
+            COUNT_COMPARE_BRANCH();
             m_assembler.tst<32>(reg, reg);
-        } else if (hasOneBitSet(mask.m_value) && ((cond == Zero) || (cond == NonZero)))
+        } else if (hasOneBitSet(mask.m_value) && ((cond == Zero) || (cond == NonZero))) {
             return Jump(makeTestBitAndBranch(reg, getLSBSet(mask.m_value), static_cast<ZeroCondition>(cond)));
-        else {
+        } else {
             LogicalImmediate logicalImm = LogicalImmediate::create32(mask.m_value);
             if (logicalImm.isValid()) {
+                COUNT_COMPARE_BRANCH();
                 m_assembler.tst<32>(reg, logicalImm);
                 return Jump(makeBranch(cond));
             }
 
             ASSERT(reg != dataTempRegister);
+            COUNT_COMPARE_BRANCH();
             move(mask, getCachedDataTempRegisterIDAndInvalidate());
             m_assembler.tst<32>(reg, dataTempRegister);
         }
@@ -3981,8 +4080,10 @@ public:
 
     Jump branchTest64(ResultCondition cond, RegisterID reg, RegisterID mask)
     {
-        if (reg == mask && (cond == Zero || cond == NonZero))
+        if (reg == mask && (cond == Zero || cond == NonZero)) {
             return Jump(makeCompareAndBranch<64>(static_cast<ZeroCondition>(cond), reg));
+        }
+        COUNT_COMPARE_BRANCH();
         m_assembler.tst<64>(reg, mask);
         return Jump(makeBranch(cond));
     }
@@ -3990,19 +4091,23 @@ public:
     Jump branchTest64(ResultCondition cond, RegisterID reg, TrustedImm32 mask = TrustedImm32(-1))
     {
         if (mask.m_value == -1) {
-            if ((cond == Zero) || (cond == NonZero))
+            if ((cond == Zero) || (cond == NonZero)) {
                 return Jump(makeCompareAndBranch<64>(static_cast<ZeroCondition>(cond), reg));
+            }
+            COUNT_COMPARE_BRANCH();
             m_assembler.tst<64>(reg, reg);
-        } else if (hasOneBitSet(mask.m_value) && ((cond == Zero) || (cond == NonZero)))
+        } else if (hasOneBitSet(mask.m_value) && ((cond == Zero) || (cond == NonZero))) {
             return Jump(makeTestBitAndBranch(reg, getLSBSet(mask.m_value), static_cast<ZeroCondition>(cond)));
-        else {
+        } else {
             LogicalImmediate logicalImm = LogicalImmediate::create64(mask.m_value);
 
             if (logicalImm.isValid()) {
+                COUNT_COMPARE_BRANCH();
                 m_assembler.tst<64>(reg, logicalImm);
                 return Jump(makeBranch(cond));
             }
 
+            COUNT_COMPARE_BRANCH();
             signExtend32ToPtr(mask, getCachedDataTempRegisterIDAndInvalidate());
             m_assembler.tst<64>(reg, dataTempRegister);
         }
@@ -4012,19 +4117,23 @@ public:
     Jump branchTest64(ResultCondition cond, RegisterID reg, TrustedImm64 mask)
     {
         if (mask.m_value == -1) {
-            if ((cond == Zero) || (cond == NonZero))
+            if ((cond == Zero) || (cond == NonZero)) {
                 return Jump(makeCompareAndBranch<64>(static_cast<ZeroCondition>(cond), reg));
+            }
+            COUNT_COMPARE_BRANCH();
             m_assembler.tst<64>(reg, reg);
-        } else if (hasOneBitSet(mask.m_value) && ((cond == Zero) || (cond == NonZero)))
+        } else if (hasOneBitSet(mask.m_value) && ((cond == Zero) || (cond == NonZero))) {
             return Jump(makeTestBitAndBranch(reg, getLSBSet(mask.m_value), static_cast<ZeroCondition>(cond)));
-        else {
+        } else {
             LogicalImmediate logicalImm = LogicalImmediate::create64(mask.m_value);
 
             if (logicalImm.isValid()) {
+                COUNT_COMPARE_BRANCH();
                 m_assembler.tst<64>(reg, logicalImm);
                 return Jump(makeBranch(cond));
             }
 
+            COUNT_COMPARE_BRANCH();
             move(mask, getCachedDataTempRegisterIDAndInvalidate());
             m_assembler.tst<64>(reg, dataTempRegister);
         }
@@ -6080,6 +6189,7 @@ public:
 protected:
     ALWAYS_INLINE Jump makeBranch(Assembler::Condition cond)
     {
+        COUNT_JUST_BRANCH();
         if (m_makeJumpPatchable)
             padBeforePatch();
         m_assembler.b_cond(cond);
@@ -6089,24 +6199,22 @@ protected:
     }
     ALWAYS_INLINE Jump makeBranch(RelationalCondition cond)
     {
-        countCompareBranch();
         return makeBranch(ARM64Condition(cond));
     }
     ALWAYS_INLINE Jump makeBranch(ResultCondition cond)
     {
-        countCompareBranch();
         return makeBranch(ARM64Condition(cond));
     }
     ALWAYS_INLINE Jump makeBranch(DoubleCondition cond)
     {
-        countCompareBranch();
         return makeBranch(ARM64Condition(cond));
     }
 
     template <int dataSize>
     ALWAYS_INLINE Jump makeCompareAndBranch(ZeroCondition cond, RegisterID reg)
     {
-        countCompareBranch();
+        COUNT_COMPARE_BRANCH();
+        COUNT_JUST_BRANCH();
         if (m_makeJumpPatchable)
             padBeforePatch();
         if (cond == IsZero)
@@ -6120,7 +6228,8 @@ protected:
 
     ALWAYS_INLINE Jump makeTestBitAndBranch(RegisterID reg, unsigned bit, ZeroCondition cond)
     {
-        countCompareBranch();
+        COUNT_COMPARE_BRANCH();
+        COUNT_JUST_BRANCH();
         if (m_makeJumpPatchable)
             padBeforePatch();
         ASSERT(bit < 64);

@@ -150,9 +150,15 @@ bool isX86_64_AVX()
 #endif
 
 void formatCompareBranchStats(std::ostream& out) {
-    out << "Compare-Branch Statistics\n";
+    out << "Compare-branch ops\n";
     out << "  Total emitted: " << compareBranchTotalEmitted << "\n";
     out << "  Total executed: " << compareBranchTotalExecuted << "\n";
+    out << "All branch ops:\n";
+    out << "  Total emitted: " << justBranchTotalEmitted << "\n";
+    out << "  Total executed: " << justBranchTotalExecuted << "\n";
+    out << "Compare-Moves\n";
+    out << "  Total emitted: " << compareMoveTotalEmitted << "\n";
+    out << "  Total executed: " << compareMoveTotalExecuted << "\n";
 }
 
 void dumpCompareBranchStatsToFile() {
