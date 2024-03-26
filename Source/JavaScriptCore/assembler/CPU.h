@@ -214,15 +214,37 @@ constexpr size_t prologueStackPointerDelta()
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #pragma clang diagnostic ignored "-Wexit-time-destructors"
+
+/* All branches */
 // Causes us to abort if we accidentally double-count
 inline std::mutex justBranchCountGuard {};
 inline size_t justBranchTotalExecuted = 0;
 inline size_t justBranchTotalEmitted = 0;
+
+/* Compare-move */
+inline size_t compareMoveTotalExecuted = 0;
+inline size_t compareMoveTotalEmitted = 0;
+
+/* Compare-branch */
 inline std::mutex compareBranchCountGuard {};
 inline size_t compareBranchTotalExecuted = 0;
 inline size_t compareBranchTotalEmitted = 0;
-inline size_t compareMoveTotalExecuted = 0;
-inline size_t compareMoveTotalEmitted = 0;
+
+enum class CompareBranchDataType {
+    kInt32,
+    kInt64,
+    kFp32,
+    kFp64,
+};
+inline size_t compareBranchExecutedByDatatype[4] {0, 0, 0, 0};
+inline size_t compareBranchEmittedByDatatype[4] {0, 0, 0, 0};
+
+inline size_t compareBranchVsZeroEmitted = 0;
+inline size_t compareBranchVsZeroExecuted = 0;
+
+inline size_t compareBranchNegatingEmitted = 0;
+inline size_t compareBranchNegatingExecuted = 0;
+
 #pragma clang diagnostic pop
 JS_EXPORT_PRIVATE void formatCompareBranchStats(std::ostream& out);
 JS_EXPORT_PRIVATE void dumpCompareBranchStatsToFile();

@@ -150,15 +150,29 @@ bool isX86_64_AVX()
 #endif
 
 void formatCompareBranchStats(std::ostream& out) {
-    out << "Compare-branch ops\n";
-    out << "  Total emitted: " << compareBranchTotalEmitted << "\n";
-    out << "  Total executed: " << compareBranchTotalExecuted << "\n";
-    out << "All branch ops:\n";
-    out << "  Total emitted: " << justBranchTotalEmitted << "\n";
-    out << "  Total executed: " << justBranchTotalExecuted << "\n";
-    out << "Compare-Moves\n";
-    out << "  Total emitted: " << compareMoveTotalEmitted << "\n";
-    out << "  Total executed: " << compareMoveTotalExecuted << "\n";
+    out << "Compare-branch ops\n"
+        << "  Emitted counts\n"
+        << "    Total: " << compareBranchTotalEmitted << "\n"
+        << "    Vs. 0: " << compareBranchVsZeroEmitted << "\n"
+        << "    Neg:   " << compareBranchNegatingEmitted << "\n"
+        << "    Fp32:  " << compareBranchEmittedByDatatype[static_cast<int>(CompareBranchDataType::kFp32)] << "\n"
+        << "    Fp64:  " << compareBranchEmittedByDatatype[static_cast<int>(CompareBranchDataType::kFp64)] << "\n"
+        << "    Int32: " << compareBranchEmittedByDatatype[static_cast<int>(CompareBranchDataType::kInt32)] << "\n"
+        << "    Int64: " << compareBranchEmittedByDatatype[static_cast<int>(CompareBranchDataType::kInt64)] << "\n"
+        << "  Executed counts\n"
+        << "    Total: " << compareBranchTotalExecuted << "\n"
+        << "    Vs. 0: " << compareBranchVsZeroExecuted << "\n"
+        << "    Neg:   " << compareBranchNegatingExecuted << "\n"
+        << "    Fp32:  " << compareBranchExecutedByDatatype[static_cast<int>(CompareBranchDataType::kFp32)] << "\n"
+        << "    Fp64:  " << compareBranchExecutedByDatatype[static_cast<int>(CompareBranchDataType::kFp64)] << "\n"
+        << "    Int32: " << compareBranchExecutedByDatatype[static_cast<int>(CompareBranchDataType::kInt32)] << "\n"
+        << "    Int64: " << compareBranchExecutedByDatatype[static_cast<int>(CompareBranchDataType::kInt64)] << "\n"
+        << "All branch ops:\n"
+        << "  Total emitted: " << justBranchTotalEmitted << "\n"
+        << "  Total executed: " << justBranchTotalExecuted << "\n"
+        << "Compare-Moves\n"
+        << "  Total emitted: " << compareMoveTotalEmitted << "\n"
+        << "  Total executed: " << compareMoveTotalExecuted << "\n";
 }
 
 void dumpCompareBranchStatsToFile() {

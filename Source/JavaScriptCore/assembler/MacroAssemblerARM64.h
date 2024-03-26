@@ -2590,8 +2590,11 @@ public:
         }
     }
 
-    void countCompareBranch() {
+    void countCompareBranch(CompareBranchDataType dt, bool cmp_vs_zero, bool negating) {
         compareBranchTotalEmitted += 1;
+        compareBranchEmittedByDatatype[static_cast<int>(dt)] += 1;
+        if (cmp_vs_zero) compareBranchVsZeroEmitted += 1;
+        if (negating) compareBranchNegatingEmitted += 1;
 
         RegisterID addr = ARM64Registers::x8;
         RegisterID scratch = ARM64Registers::x9;
@@ -2601,6 +2604,19 @@ public:
         move(TrustedImm64(bitwise_cast<uint64_t>(&compareBranchTotalExecuted)), addr);
         move(TrustedImm64(1), scratch);
         atomicXchgAdd64(scratch, Address(addr), scratch);
+        move(TrustedImm64(bitwise_cast<uint64_t>(&(compareBranchExecutedByDatatype[static_cast<int>(dt)]))), addr);
+        move(TrustedImm64(1), scratch);
+        atomicXchgAdd64(scratch, Address(addr), scratch);
+        if (cmp_vs_zero) {
+            move(TrustedImm64(bitwise_cast<uint64_t>(&compareBranchVsZeroExecuted)), addr);
+            move(TrustedImm64(1), scratch);
+            atomicXchgAdd64(scratch, Address(addr), scratch);
+        }
+        if (negating) {
+            move(TrustedImm64(bitwise_cast<uint64_t>(&compareBranchNegatingExecuted)), addr);
+            move(TrustedImm64(1), scratch);
+            atomicXchgAdd64(scratch, Address(addr), scratch);
+        }
 
         popPair(addr, scratch);
     }
@@ -2609,10 +2625,10 @@ public:
 #define CONCATENATE(x, y) CONCATENATE_DETAIL(x, y)
 #define UNIQUE_NAME(prefix) CONCATENATE(prefix, __COUNTER__)
 
-#define COUNT_COMPARE_BRANCH() \
+#define COUNT_COMPARE_BRANCH(dtype, cmp_vs_zero, negating) \
     /*printf("*** counting compare-branch inside %s %d\n", __PRETTY_FUNCTION__, __LINE__);*/ \
     std::scoped_lock UNIQUE_NAME(lock)(compareBranchCountGuard); \
-    countCompareBranch();
+    countCompareBranch(dtype, cmp_vs_zero, negating);
     
 
     void countJustBranch() {
@@ -2653,28 +2669,28 @@ public:
 
     Jump branchDouble(DoubleCondition cond, FPRegisterID left, FPRegisterID right)
     {
-        COUNT_COMPARE_BRANCH();
+        COUNT_COMPARE_BRANCH(CompareBranchDataType::kFp64, false, false);
         m_assembler.fcmp<64>(left, right);
         return jumpAfterFloatingPointCompare(cond);
     }
 
     Jump branchFloat(DoubleCondition cond, FPRegisterID left, FPRegisterID right)
     {
-        COUNT_COMPARE_BRANCH();
+        COUNT_COMPARE_BRANCH(CompareBranchDataType::kFp32, false, false);
         m_assembler.fcmp<32>(left, right);
         return jumpAfterFloatingPointCompare(cond);
     }
 
     Jump branchDoubleWithZero(DoubleCondition cond, FPRegisterID left)
     {
-        COUNT_COMPARE_BRANCH();
+        COUNT_COMPARE_BRANCH(CompareBranchDataType::kFp64, true, false);
         m_assembler.fcmp_0<64>(left);
         return jumpAfterFloatingPointCompare(cond);
     }
 
     Jump branchFloatWithZero(DoubleCondition cond, FPRegisterID left)
     {
-        COUNT_COMPARE_BRANCH();
+        COUNT_COMPARE_BRANCH(CompareBranchDataType::kFp32, true, false);
         m_assembler.fcmp_0<32>(left);
         return jumpAfterFloatingPointCompare(cond);
     }
@@ -2709,7 +2725,7 @@ public:
 
     Jump branchDoubleNonZero(FPRegisterID reg, FPRegisterID)
     {
-        COUNT_COMPARE_BRANCH();
+        COUNT_COMPARE_BRANCH(CompareBranchDataType::kFp64, true, false);
         m_assembler.fcmp_0<64>(reg);
         Jump unordered = makeBranch(Assembler::ConditionVS);
         Jump result = makeBranch(Assembler::ConditionNE);
@@ -2719,7 +2735,7 @@ public:
 
     Jump branchDoubleZeroOrNaN(FPRegisterID reg, FPRegisterID)
     {
-        COUNT_COMPARE_BRANCH();
+        COUNT_COMPARE_BRANCH(CompareBranchDataType::kFp64, true, false);
         m_assembler.fcmp_0<64>(reg);
         Jump unordered = makeBranch(Assembler::ConditionVS);
         Jump notEqual = makeBranch(Assembler::ConditionNE);
@@ -2732,7 +2748,7 @@ public:
 
     Jump branchTruncateDoubleToInt32(FPRegisterID src, RegisterID dest, BranchTruncateType branchType = BranchIfTruncateFailed)
     {
-        COUNT_COMPARE_BRANCH();
+        COUNT_COMPARE_BRANCH(CompareBranchDataType::kFp64, false, false);
         // Truncate to a 64-bit integer in dataTempRegister, copy the low 32-bit to dest.
         m_assembler.fcvtzs<64, 64>(getCachedDataTempRegisterIDAndInvalidate(), src);
         zeroExtend32ToWord(dataTempRegister, dest);
@@ -3797,7 +3813,7 @@ public:
 
     Jump branch32(RelationalCondition cond, RegisterID left, RegisterID right)
     {
-        COUNT_COMPARE_BRANCH();
+        COUNT_COMPARE_BRANCH(CompareBranchDataType::kInt32, false, false);
         m_assembler.cmp<32>(left, right);
         return Jump(makeBranch(cond));
     }
@@ -3813,14 +3829,14 @@ public:
         if (auto tuple = tryExtractShiftedImm(immediate)) {
             auto [u12, shift, inverted] = tuple.value();
             if (!inverted) {
-                COUNT_COMPARE_BRANCH();
+                COUNT_COMPARE_BRANCH(CompareBranchDataType::kInt32, false, false);
                 m_assembler.cmp<32>(left, u12, shift);
             } else {
-                COUNT_COMPARE_BRANCH();
+                COUNT_COMPARE_BRANCH(CompareBranchDataType::kInt32, false, true);
                 m_assembler.cmn<32>(left, u12, shift);
             }
         } else {
-            COUNT_COMPARE_BRANCH();
+            COUNT_COMPARE_BRANCH(CompareBranchDataType::kInt32, false, false);
             moveToCachedReg(right, dataMemoryTempRegister());
             m_assembler.cmp<32>(left, dataTempRegister);
         }
@@ -3875,7 +3891,7 @@ public:
                 right = dataTempRegister;
             }
         }
-        COUNT_COMPARE_BRANCH();
+        COUNT_COMPARE_BRANCH(CompareBranchDataType::kInt64, false, false);
         m_assembler.cmp<64>(left, right);
         return Jump(makeBranch(cond));
     }
@@ -3891,14 +3907,14 @@ public:
         if (auto tuple = tryExtractShiftedImm(immediate)) {
             auto [u12, shift, inverted] = tuple.value();
             if (!inverted) {
-                COUNT_COMPARE_BRANCH();
+                COUNT_COMPARE_BRANCH(CompareBranchDataType::kInt64, false, false);
                 m_assembler.cmp<64>(left, u12, shift);
             } else {
-                COUNT_COMPARE_BRANCH();
+                COUNT_COMPARE_BRANCH(CompareBranchDataType::kInt64, false, true);
                 m_assembler.cmn<64>(left, u12, shift);
             }
         } else {
-            COUNT_COMPARE_BRANCH();
+            COUNT_COMPARE_BRANCH(CompareBranchDataType::kInt64, false, false);
             moveToCachedReg(right, dataMemoryTempRegister());
             m_assembler.cmp<64>(left, dataTempRegister);
         }
@@ -3916,14 +3932,14 @@ public:
         if (auto tuple = tryExtractShiftedImm(immediate)) {
             auto [u12, shift, inverted] = tuple.value();
             if (!inverted) {
-                COUNT_COMPARE_BRANCH();
+                COUNT_COMPARE_BRANCH(CompareBranchDataType::kInt64, false, false);
                 m_assembler.cmp<64>(left, u12, shift);
             } else {
-                COUNT_COMPARE_BRANCH();
+                COUNT_COMPARE_BRANCH(CompareBranchDataType::kInt64, false, true);
                 m_assembler.cmn<64>(left, u12, shift);
             }
         } else {
-            COUNT_COMPARE_BRANCH();
+            COUNT_COMPARE_BRANCH(CompareBranchDataType::kInt64, false, false);
             moveToCachedReg(right, dataMemoryTempRegister());
             m_assembler.cmp<64>(left, dataTempRegister);
         }
@@ -4039,20 +4055,20 @@ public:
             if ((cond == Zero) || (cond == NonZero)) {
                 return Jump(makeCompareAndBranch<32>(static_cast<ZeroCondition>(cond), reg));
             }
-            COUNT_COMPARE_BRANCH();
+            COUNT_COMPARE_BRANCH(CompareBranchDataType::kInt32, false, false);
             m_assembler.tst<32>(reg, reg);
         } else if (hasOneBitSet(mask.m_value) && ((cond == Zero) || (cond == NonZero))) {
             return Jump(makeTestBitAndBranch(reg, getLSBSet(mask.m_value), static_cast<ZeroCondition>(cond)));
         } else {
             LogicalImmediate logicalImm = LogicalImmediate::create32(mask.m_value);
             if (logicalImm.isValid()) {
-                COUNT_COMPARE_BRANCH();
+                COUNT_COMPARE_BRANCH(CompareBranchDataType::kInt32, ((cond == Zero) || (cond == NonZero)), false);
                 m_assembler.tst<32>(reg, logicalImm);
                 return Jump(makeBranch(cond));
             }
 
             ASSERT(reg != dataTempRegister);
-            COUNT_COMPARE_BRANCH();
+            COUNT_COMPARE_BRANCH(CompareBranchDataType::kInt32, false, false);
             move(mask, getCachedDataTempRegisterIDAndInvalidate());
             m_assembler.tst<32>(reg, dataTempRegister);
         }
@@ -4083,7 +4099,7 @@ public:
         if (reg == mask && (cond == Zero || cond == NonZero)) {
             return Jump(makeCompareAndBranch<64>(static_cast<ZeroCondition>(cond), reg));
         }
-        COUNT_COMPARE_BRANCH();
+        COUNT_COMPARE_BRANCH(CompareBranchDataType::kInt64, false, false);
         m_assembler.tst<64>(reg, mask);
         return Jump(makeBranch(cond));
     }
@@ -4094,7 +4110,7 @@ public:
             if ((cond == Zero) || (cond == NonZero)) {
                 return Jump(makeCompareAndBranch<64>(static_cast<ZeroCondition>(cond), reg));
             }
-            COUNT_COMPARE_BRANCH();
+            COUNT_COMPARE_BRANCH(CompareBranchDataType::kInt64, false, false);
             m_assembler.tst<64>(reg, reg);
         } else if (hasOneBitSet(mask.m_value) && ((cond == Zero) || (cond == NonZero))) {
             return Jump(makeTestBitAndBranch(reg, getLSBSet(mask.m_value), static_cast<ZeroCondition>(cond)));
@@ -4102,12 +4118,12 @@ public:
             LogicalImmediate logicalImm = LogicalImmediate::create64(mask.m_value);
 
             if (logicalImm.isValid()) {
-                COUNT_COMPARE_BRANCH();
+                COUNT_COMPARE_BRANCH(CompareBranchDataType::kInt64, ((cond == Zero) || (cond == NonZero)), false);
                 m_assembler.tst<64>(reg, logicalImm);
                 return Jump(makeBranch(cond));
             }
 
-            COUNT_COMPARE_BRANCH();
+            COUNT_COMPARE_BRANCH(CompareBranchDataType::kInt64, false, false);
             signExtend32ToPtr(mask, getCachedDataTempRegisterIDAndInvalidate());
             m_assembler.tst<64>(reg, dataTempRegister);
         }
@@ -4120,7 +4136,7 @@ public:
             if ((cond == Zero) || (cond == NonZero)) {
                 return Jump(makeCompareAndBranch<64>(static_cast<ZeroCondition>(cond), reg));
             }
-            COUNT_COMPARE_BRANCH();
+            COUNT_COMPARE_BRANCH(CompareBranchDataType::kInt64, false, false);
             m_assembler.tst<64>(reg, reg);
         } else if (hasOneBitSet(mask.m_value) && ((cond == Zero) || (cond == NonZero))) {
             return Jump(makeTestBitAndBranch(reg, getLSBSet(mask.m_value), static_cast<ZeroCondition>(cond)));
@@ -4128,12 +4144,12 @@ public:
             LogicalImmediate logicalImm = LogicalImmediate::create64(mask.m_value);
 
             if (logicalImm.isValid()) {
-                COUNT_COMPARE_BRANCH();
+                COUNT_COMPARE_BRANCH(CompareBranchDataType::kInt64, ((cond == Zero) || (cond == NonZero)), false);
                 m_assembler.tst<64>(reg, logicalImm);
                 return Jump(makeBranch(cond));
             }
 
-            COUNT_COMPARE_BRANCH();
+            COUNT_COMPARE_BRANCH(CompareBranchDataType::kInt64, false, false);
             move(mask, getCachedDataTempRegisterIDAndInvalidate());
             m_assembler.tst<64>(reg, dataTempRegister);
         }
@@ -6213,14 +6229,16 @@ protected:
     template <int dataSize>
     ALWAYS_INLINE Jump makeCompareAndBranch(ZeroCondition cond, RegisterID reg)
     {
-        COUNT_COMPARE_BRANCH();
         COUNT_JUST_BRANCH();
         if (m_makeJumpPatchable)
             padBeforePatch();
-        if (cond == IsZero)
+        if (cond == IsZero) {
+            COUNT_COMPARE_BRANCH(dataSize > 32 ? CompareBranchDataType::kInt64 : CompareBranchDataType::kInt32, true, false);
             m_assembler.cbz<dataSize>(reg);
-        else
+        } else {
+            COUNT_COMPARE_BRANCH(dataSize > 32 ? CompareBranchDataType::kInt64 : CompareBranchDataType::kInt32, true, true);
             m_assembler.cbnz<dataSize>(reg);
+        }
         AssemblerLabel label = m_assembler.labelIgnoringWatchpoints();
         m_assembler.nop();
         return Jump(label, m_makeJumpPatchable ? Assembler::JumpCompareAndBranchFixedSize : Assembler::JumpCompareAndBranch, static_cast<Assembler::Condition>(cond), dataSize == 64, reg);
@@ -6228,16 +6246,18 @@ protected:
 
     ALWAYS_INLINE Jump makeTestBitAndBranch(RegisterID reg, unsigned bit, ZeroCondition cond)
     {
-        COUNT_COMPARE_BRANCH();
         COUNT_JUST_BRANCH();
         if (m_makeJumpPatchable)
             padBeforePatch();
         ASSERT(bit < 64);
         bit &= 0x3f;
-        if (cond == IsZero)
+        if (cond == IsZero) {
+            COUNT_COMPARE_BRANCH(bit >= 32 ? CompareBranchDataType::kInt64 : CompareBranchDataType::kInt32, true, false);
             m_assembler.tbz(reg, bit);
-        else
+        } else {
+            COUNT_COMPARE_BRANCH(bit >= 32 ? CompareBranchDataType::kInt64 : CompareBranchDataType::kInt32, true, true);
             m_assembler.tbnz(reg, bit);
+        }
         AssemblerLabel label = m_assembler.labelIgnoringWatchpoints();
         m_assembler.nop();
         return Jump(label, m_makeJumpPatchable ? Assembler::JumpTestBitFixedSize : Assembler::JumpTestBit, static_cast<Assembler::Condition>(cond), bit, reg);
